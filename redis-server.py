@@ -1,79 +1,72 @@
 import socket
 
-HOST = "0.0.0.0"
-PORT = 6379
-BLOOM_FILTER_KEY = "matrix"
-RESPONSE_TERMINATOR="\r\n"
-OK_RESPONSE = f"+OK{RESPONSE_TERMINATOR}"
+PROTOCOL_TERMINATOR = "\r\n"
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.bind((HOST, PORT))
-    s.listen()
+key_space = {}
 
-    # This only listens in a way that one client can connect...
-    while True:
-        conn, addr = s.accept()
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("0.0.0.0", 6379))
+s.listen()
 
-        with conn:
-            while True:
-                data = conn.recv(2048)
+while True:
+    conn, addr = s.accept()
 
-                if not data:
-                    break
+    with conn:
+        while True:
+            data = conn.recv(2048)
 
-                request = data.decode().split(RESPONSE_TERMINATOR)
-                print(request)
+            if not data:
+                break
+            
+            print(data)
+            request = data.decode().split(PROTOCOL_TERMINATOR)
+            request.pop()
+            request = request[2::]
+            request = request[::2]
+            print(request)
 
-                # We don't need the first two parts.
-                request = request[2::]
+            command = request[0].lower()
 
-                # We don't need the final part.
-                request.pop()
+            if command == "command":
+                response = f"+OK{PROTOCOL_TERMINATOR}"
+            else:
+                key_name = request[1]
 
-                # We don't need every other item.
-                request = request[::2]
+                if command == "sadd":
+                    new_set_members = request[2::]
+                    try:
+                        old_set_cardinality = len(key_space[key_name])
+                        key_space[key_name].update(new_set_members)
+                    except KeyError:
+                        old_set_cardinality = 0
+                        key_space[key_name] = set(new_set_members)
 
-                print(request)
+                    new_set_cardinality = len(key_space[key_name])
 
-                # Which Redis command is this?
-                command = request[0].lower()
+                    print(key_space[key_name])
+                    response = f":{new_set_cardinality - old_set_cardinality}{PROTOCOL_TERMINATOR}"
+                elif command == "sismember":
+                    member_to_check = request[2]
+                    is_member = 0
 
-                print(command)
+                    try:
+                        if member_to_check in key_space[key_name]:
+                            is_member = 1
+                    except KeyError:
+                        pass
+                        
+                    response = f":{is_member}{PROTOCOL_TERMINATOR}"
+                elif command == "scard":
+                    try:
+                        set_cardinality = len(key_space[key_name])
+                    except KeyError:
+                        set_cardinality = 0
 
-                if command == "command":
-                    # redis-cli sends command with no arguments when it first connects.
-                    if len(request) == 1:
-                        response = OK_RESPONSE
-                    else:
-                        response = f"-ERR wrong number of arguments for 'command' command{RESPONSE_TERMINATOR}"
-                elif command == "bf.add":
-                    # Key needs to be BLOOM_FILTER_KEY and we need one item.
-                    if len(request) == 3 and request[1] == BLOOM_FILTER_KEY:
-                        response = OK_RESPONSE
-                    elif len(request) == 3:
-                        # Wrong key...
-                        response = f":0{RESPONSE_TERMINATOR}"
-                    else:
-                        response = f"-ERR wrong number of arguments for 'bf.add' command{RESPONSE_TERMINATOR}"
-                elif command == "bf.exists":
-                    # Key needs to be BLOOM_FILTER_KEY and we need one item.
-                    if len(request) == 3 and request[1] == BLOOM_FILTER_KEY:
-                        response = OK_RESPONSE
-                    elif len(request) == 3:
-                        # Wrong key...
-                        response = f":0{RESPONSE_TERMINATOR}"
-                    else:
-                        response = f"-ERR wrong number of arguments for 'bf.exists' command{RESPONSE_TERMINATOR}"               
-                elif command == "del":
-                    # Clear the filter if the key was BLOOM_FILTER_KEY otherwise return 0.
-                    if len(request) == 2 and request[1] == BLOOM_FILTER_KEY:
-                        response = f":1{RESPONSE_TERMINATOR}"
-                    elif len(request) == 2:
-                        response = f":0{RESPONSE_TERMINATOR}"
-                    else:
-                        response = f"-ERR wrong number of arguments for 'del' command{RESPONSE_TERMINATOR}"   
+                    response = f":{set_cardinality}{PROTOCOL_TERMINATOR}"            
                 else:
-                    response = f"-ERR unknown command '{command}'{RESPONSE_TERMINATOR}"
+                    response = f"+OK{PROTOCOL_TERMINATOR}"
 
-                print(f"sending: {response}")
-                conn.sendall(bytes(response, 'UTF-8'))
+
+            print(f"sending: {response}")
+            conn.sendall(bytes(response, 'UTF-8'))
