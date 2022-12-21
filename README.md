@@ -2,6 +2,8 @@
 
 Attempt to build a Bloom Filter implementation using a [Pimoroni Unicorn HAT](https://shop.pimoroni.com/products/unicorn-hat?variant=932565325) on a Raspberry Pi that talks the RESP protocol.  This is the repo to support my livestream series "Things on Thursdays" ([see all episodes](https://simonprickett.dev/things-on-thursdays-livestreams/)).  This needs to be run on a Raspberry Pi with a Unicorn HAT attached.
 
+![Still image from the livestream showing the project working](redis_compatible_bloom.png)
+
 Here's the videos from this series:
 
 * [Episode One - RESP protocol and exploring Redis Sets](https://www.youtube.com/watch?v=uyjAFP73ttI)
